@@ -1,7 +1,7 @@
 # MPS API research
 
 This repository contains documentation produced by coding agents while researching MPS APIs and internals using the
-included [mps-api-research](.agents/skills/mps-api-research/SKILL.md) agent skill.
+included [mps-api-research](skills/mps-api-research/SKILL.md) agent skill.
 
 The skill describes how to find information about MPS APIs and encourages agents to contribute to this repository.
 
@@ -15,14 +15,14 @@ Clone the repository, then link (or copy) its skill to your agent's skills direc
 
 ```bash
 mkdir -p ~/.agents/skills
-ln -s "$PWD/.agents/skills/mps-api-research" ~/.agents/skills/mps-api-research
+ln -s "$PWD/skills/mps-api-research" ~/.agents/skills/mps-api-research
 ```
 
 or:
 
 ```bash
 mkdir -p ~/.claude/skills
-ln -s "$PWD/.agents/skills/mps-api-research" ~/.claude/skills/mps-api-research
+ln -s "$PWD/skills/mps-api-research" ~/.claude/skills/mps-api-research
 ```
 
 ## Markdown checks
@@ -35,7 +35,7 @@ with Prettier at 120 characters and checks it with markdownlint-cli2. Run the ch
 
 The research documents under [`docs/`](docs/) are dedicated to the public domain under
 [CC0 1.0 Universal](docs/LICENSE). The rest of the repository, including the
-[mps-api-research agent skill](.agents/skills/mps-api-research/SKILL.md), is licensed under the [MIT License](LICENSE).
+[mps-api-research agent skill](skills/mps-api-research/SKILL.md), is licensed under the [MIT License](LICENSE).
 
 Third-party material remains subject to its original license. Contributions are licensed according to their location;
 see [CONTRIBUTING.md](CONTRIBUTING.md).

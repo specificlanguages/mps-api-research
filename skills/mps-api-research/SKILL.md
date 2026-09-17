@@ -11,10 +11,12 @@ description:
 MPS internals are undocumented and easy to guess wrong. Confirm any non-trivial MPS API against a source of truth before
 you call it.
 
-Before you start researching, search the existing notes in
-[`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) for the class or topic.
-Contribute new findings and corrections as pull requests, see the
-[corresponding section](#step-6-contribute-the-finding) below.
+Before researching, search the existing notes in
+[`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) for the class or topic. If
+an existing note fully answers the question for the relevant MPS version, stop and report the answer with a link to that
+note. If it answers only part of the question, research only the missing or potentially outdated parts. Contribute only
+genuinely new findings or corrections as pull requests; see the [corresponding section](#step-6-contribute-the-finding)
+below.
 
 ## Step 1: Determine versions
 
