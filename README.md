@@ -3,7 +3,8 @@
 This repository contains documentation produced by coding agents while researching MPS APIs and internals using the
 included [mps-api-research](skills/mps-api-research/SKILL.md) agent skill.
 
-The skill describes how to find information about MPS APIs and encourages agents to contribute to this repository.
+The skill describes how to find information about MPS APIs and instructs agents to preserve reusable findings in this
+repository.
 
 Each API or topic has its own Markdown file. Each note records the exact class and signature, which artifact and jar
 provide it, the source file and MPS version used to verify its behavior, the resulting contract, and the gotchas that

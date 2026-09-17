@@ -1,9 +1,9 @@
 ---
 name: mps-api-research
 description:
-  Research a JetBrains MPS internal API instead of guessing at it — confirm a class or method's exact signature or its
-  runtime behavior against the local MPS jars and source. Use when writing or debugging code that calls MPS internals
-  and you're unsure how an API is shaped or behaves.
+  Research a JetBrains MPS internal API instead of guessing at it. Confirm exact signature and behavior against MPS
+  sources or binaries, and preserve findings. Use when writing or debugging code that calls MPS internals and you're
+  unsure how an API is shaped or behaves.
 ---
 
 # Researching MPS APIs
@@ -14,9 +14,23 @@ you call it.
 Before researching, search the existing notes in
 [`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) for the class or topic. If
 an existing note fully answers the question for the relevant MPS version, stop and report the answer with a link to that
-note. If it answers only part of the question, research only the missing or potentially outdated parts. Contribute only
-genuinely new findings or corrections as pull requests; see the [corresponding section](#step-7-contribute-the-finding)
-below.
+note. If it answers only part of the question, research only the missing or potentially outdated parts.
+
+## Expected outcome
+
+Answering the immediate API question and preserving reusable findings are both parts of this skill. When the
+investigation establishes a reusable fact that is not already documented for the relevant MPS version, create or update
+a focused note under `docs/` in a writable checkout of this repository. Treat that local documentation change as a
+normal completion step unless:
+
+- the user requested a read-only investigation,
+- the checkout is outside the permitted task or filesystem scope,
+- the finding is specific to the originating project, or
+- the evidence is too incomplete to state a useful verified conclusion.
+
+Do not omit the note merely because the finding is small, the originating code change is already complete, or opening a
+pull request is not authorized. If the local checkout is unavailable or outside the permitted scope, ask early for any
+authorization needed to prepare the documentation rather than waiting until the research is complete.
 
 ## Step 1: Determine versions
 
@@ -101,15 +115,21 @@ Verify that the note:
 - notes meaningful differences between researched versions (if multiple versions were researched),
 - contains no local machine paths or project-specific terminology.
 
-## Step 7: Contribute the finding
+## Step 7: Preserve reusable findings locally
 
-Contribute corrections and new findings to
-[`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) by forking the repository
-if necessary. Add or update the focused topic note and match the repository's existing structure.
+If the research produced a reusable new finding or corrected an existing note, create or update the appropriate file in
+the local mps-api-research checkout under `docs/` before concluding the task.
 
-Forking, pushing a branch, opening a pull request, or otherwise changing the remote repository still requires the user's
-authorization. Without that authorization, prepare the documentation change locally and tell the user it is ready to
-contribute.
+A finding is worth recording when it would save a future agent from repeating source inspection, decompilation, or a
+runtime probe. This includes exact signatures, version differences, lifecycle or threading constraints, artifact
+locations, surprising behavior, and disproved plausible assumptions.
+
+If the mps-api-research repository is checked out locally, writable, and within the permitted task scope, edit it
+directly. Research performed for another repository does not make the finding project-specific: write the note in
+project-agnostic terms and keep the originating project's names and architecture out of it.
+
+If no suitable writable checkout is available, ask once for permission to clone or otherwise prepare the repository. If
+that is not possible, include a ready-to-save Markdown note in the final response.
 
 Remember to make the note reusable:
 
@@ -120,3 +140,9 @@ Remember to make the note reusable:
 - **Project-agnostic:** Write the note as standalone MPS documentation. The research was likely motivated by the needs
   of some project but the note must make sense to a reader who has never heard of the project and/or has no access to
   it. Do not include the name of the project or the name of its components or refer to its architecture, and the like.
+
+## Step 8: Publish when authorized
+
+Committing, pushing, forking, opening a pull request, or otherwise changing repository or remote state requires the
+applicable authorization. Lack of authorization for those actions does not prevent creating and validating the local
+documentation change. Report its path and leave publication to the user.
