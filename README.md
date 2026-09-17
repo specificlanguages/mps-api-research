@@ -19,3 +19,12 @@ project-specific terminology.
 Install [prek](https://prek.j178.dev/) and run `prek install` once after cloning. The pre-commit hook formats Markdown
 with Prettier at 120 characters and checks it with markdownlint-cli2. Run the checks manually with
 `prek run --all-files`.
+
+## License
+
+The research documents under [`docs/`](docs/) are dedicated to the public domain under
+[CC0 1.0 Universal](docs/LICENSE). The rest of the repository, including the
+[mps-api-research agent skill](.agents/skills/mps-api-research/SKILL.md), is licensed under the [MIT License](LICENSE).
+
+Third-party material remains subject to its original license. Contributions are licensed according to their location;
+see [CONTRIBUTING.md](CONTRIBUTING.md).
