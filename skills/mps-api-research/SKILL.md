@@ -15,7 +15,7 @@ Before researching, search the existing notes in
 [`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) for the class or topic. If
 an existing note fully answers the question for the relevant MPS version, stop and report the answer with a link to that
 note. If it answers only part of the question, research only the missing or potentially outdated parts. Contribute only
-genuinely new findings or corrections as pull requests; see the [corresponding section](#step-6-contribute-the-finding)
+genuinely new findings or corrections as pull requests; see the [corresponding section](#step-7-contribute-the-finding)
 below.
 
 ## Step 1: Determine versions
@@ -80,7 +80,14 @@ evidence that no runtime constraint exists.** Construct and run a probe to confi
 - For concrete data (node ids, roles, which node trips a rule), grep the model rather than assuming — the ids are opaque
   and unguessable.
 
-## Step 5: Review
+## Step 5: Write
+
+When writing the research note, use the `show-me` skill if it is available and a concise diagram, call tree, file tree,
+or code-shape sketch would make the API's control flow, lifecycle, ownership, or version differences easier to
+understand. Choose the smallest visual that clarifies the finding; do not add a visual when prose or a short table is
+already clearer.
+
+## Step 6: Review
 
 If available, optionally ask another agent (with a fresh context) to review the document you produced.
 
@@ -94,7 +101,7 @@ Verify that the note:
 - notes meaningful differences between researched versions (if multiple versions were researched),
 - contains no local machine paths or project-specific terminology.
 
-## Step 6: Contribute the finding
+## Step 7: Contribute the finding
 
 Contribute corrections and new findings to
 [`specificlanguages/mps-api-research`](https://github.com/specificlanguages/mps-api-research) by forking the repository
