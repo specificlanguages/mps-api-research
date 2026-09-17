@@ -39,3 +39,6 @@ The research documents under [`docs/`](docs/) are dedicated to the public domain
 
 Third-party material remains subject to its original license. Contributions are licensed according to their location;
 see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+JetBrains-authored MPS and IntelliJ Platform source referenced by the research documents is licensed under the
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), unless the referenced source states otherwise.
