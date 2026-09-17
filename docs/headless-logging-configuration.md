@@ -45,6 +45,55 @@ JUL filtering has two independent gates: the logger's effective level and every 
 logger or only a handler is insufficient. A JUL `ConsoleHandler` always writes to stderr; splitting informational output
 to stdout and warnings/errors to stderr requires custom handlers or direct writes to preserved streams.
 
+### Initialization at a glance
+
+The decisive boundary is `IdeaEnvironment.init()`: IntelliJ replaces the root JUL handlers during that call. A final
+host-owned configuration therefore belongs after it.
+
+```mermaid
+flowchart TD
+    host[Host saves stdout/stderr<br/>and sets startup properties]
+    version{MPS version}
+    automatic[Environment class automatically<br/>calls LogInitializer.init]
+    explicit[Host optionally calls<br/>LogInitializer.init]
+    environment{Environment}
+    mps[MpsEnvironment<br/>keeps the current JUL handlers]
+    idea[IdeaEnvironment.init]
+    mode{Test mode?}
+    normal[LoggerFactory]
+    test[TestLoggerFactory]
+    replace[Clear root handlers<br/>and install platform handlers]
+    final[Host installs the final<br/>levels and handlers]
+
+    host --> version
+    version -->|2023.2–2025.1| automatic
+    version -->|2026.1 and 262| explicit
+    automatic --> environment
+    explicit --> environment
+    environment -->|MpsEnvironment| mps
+    environment -->|IdeaEnvironment| idea
+    mps --> final
+    idea --> mode
+    mode -->|no| normal
+    mode -->|yes| test
+    normal --> replace
+    test --> replace
+    replace --> final
+```
+
+The resulting control points are:
+
+| Environment and version           | MPS initializer                       | Root handlers replaced later? |
+| --------------------------------- | ------------------------------------- | ----------------------------- |
+| `MpsEnvironment`, 2023.2--2025.1  | Automatic during class initialization | No                            |
+| `MpsEnvironment`, 2026.1 and 262  | Explicit and optional                 | No                            |
+| `IdeaEnvironment`, 2023.2--2025.1 | Automatic during class initialization | Yes, during `init()`          |
+| `IdeaEnvironment`, 2026.1 and 262 | Explicit and optional                 | Yes, during `init()`          |
+
+For `IdeaEnvironment`, test mode selects `TestLoggerFactory`; non-test mode selects the normal platform `LoggerFactory`.
+Both lead to the same root-handler replacement shown above, but their console-property behavior differs as described
+below.
+
 ## MPS initialization through 2025.1
 
 In 2023.2.2, 2024.1.2, and 2025.1.1, both concrete environment classes contain a static initializer:
