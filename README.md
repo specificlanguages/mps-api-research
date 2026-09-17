@@ -25,12 +25,6 @@ mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/mps-api-research" ~/.claude/skills/mps-api-research
 ```
 
-## Markdown checks
-
-Install [prek](https://prek.j178.dev/) and run `prek install` once after cloning. The pre-commit hook formats Markdown
-with Prettier at 120 characters and checks it with markdownlint-cli2. Run the checks manually with
-`prek run --all-files`.
-
 ## License
 
 The research documents under [`docs/`](docs/) are dedicated to the public domain under

@@ -13,3 +13,9 @@ A contribution that changes files in both areas is governed by the applicable te
 right to submit the contribution under those terms. Identify the origin and license when a contribution incorporates
 substantial third-party text, code, images, or other material. Source references and short excerpts used as technical
 evidence do not require a separate license notice in every research note.
+
+## Markdown checks
+
+Install [prek](https://prek.j178.dev/) and run `prek install` once after cloning. The pre-commit hook formats Markdown
+with Prettier at 120 characters and checks it with markdownlint-cli2. Run the checks manually with
+`prek run --all-files`.
