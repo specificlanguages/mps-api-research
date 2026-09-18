@@ -1,6 +1,6 @@
 # Repairing `-1` used-language versions in models
 
-Verified against MPS 2026.1.1 sources. The relevant behavior is in `mps-kernel.jar`, with persistence in
+Verified against MPS 2025.1.4 and 2026.1.1 sources. The relevant behavior is in `mps-kernel.jar`, with persistence in
 `mps-model-persistence.jar`.
 
 ## Meaning and origin
@@ -9,17 +9,20 @@ A model stores an integer version for every explicitly used language. In XML per
 attribute of a `<use>` element. A value of `-1` means that MPS could not deduce the language version; it does not denote
 a real language version.
 
-The ordinary `SModelInternal.addLanguage(SLanguage)` path asks `SLanguage.getLanguageVersion()` for the value to record.
-For the standard `SLanguageAdapter`, that method looks up the language's active `LanguageRuntime` and returns
-`LanguageRuntime.getVersion()`. It returns `-1` when the runtime is unavailable. Therefore a model can acquire `-1` when
-code adds a used language before its runtime has been loaded, after it has been unloaded, or when the runtime cannot be
-created. Code using the lower-level `jetbrains.mps.smodel.SModel.addLanguage(SLanguage)` also records `-1`
-unconditionally in MPS 2026.1; that overload is deprecated for removal.
+In MPS 2025.1.4, `SModelInternal.addLanguage(SLanguage)` delegates to
+`jetbrains.mps.smodel.SModel.addLanguage(SLanguage)`, which asks the deprecated `SLanguage.getLanguageVersion()` for the
+value to record. For the standard `SLanguageAdapter`, that method looks up the language's active `LanguageRuntime` and
+returns `LanguageRuntime.getVersion()`, or `-1` when the runtime is unavailable. Therefore a model can acquire `-1` when
+code adds a used language before its runtime has loaded, after it has unloaded, or when the runtime cannot be created.
+
+MPS 2026.1.1 changed the lower-level `jetbrains.mps.smodel.SModel.addLanguage(SLanguage)` behavior: it records `-1`
+unconditionally and that overload is deprecated for removal. Do not use either version of this method as a repair API.
 
 Persistence does not normalize the value. `ModelWriter9.saveUsedLanguages` writes the model's recorded integer as-is.
 
-Calling `SModelInternal.addLanguage` again is not a repair operation. If the import already exists with `-1` and the
-runtime now reports a non-negative version, the method leaves the existing value unchanged.
+Calling `SModelInternal.addLanguage` again is not a repair operation. In MPS 2025.1.4, an existing `-1` import remains
+unchanged even when the language now reports a non-negative version. MPS 2026.1.1 likewise does not repair the existing
+value.
 
 ## Repair
 
@@ -63,12 +66,15 @@ models.
 
 - `core/openapi/source/org/jetbrains/mps/openapi/language/SLanguage.java`: `getLanguageVersion()` documents `-1` as a
   version that could not be deduced.
-- `core/kernel/source/jetbrains/mps/smodel/adapter/structure/language/SLanguageAdapter.java`: `getLanguageVersion()`
-  returns `-1` when `getLanguageDescriptor()` returns `null`, otherwise the runtime version.
-- `core/kernel/source/jetbrains/mps/extapi/model/SModelDescriptorStub.java`: `addLanguage(SLanguage)` obtains the
-  version from `SLanguage` and does not replace an existing `-1` with a later non-negative value.
-- `core/kernel/source/jetbrains/mps/smodel/SModel.java`: the deprecated one-argument `addLanguage` records `-1`;
+- [`core/kernel/source/jetbrains/mps/smodel/adapter/structure/language/SLanguageAdapter.java` (2025.1.4, lines 97-103)](https://github.com/JetBrains/MPS/blob/2025.1.4/core/kernel/source/jetbrains/mps/smodel/adapter/structure/language/SLanguageAdapter.java#L97-L103):
+  `getLanguageVersion()` returns `-1` when `getLanguageDescriptor()` returns `null`, otherwise the runtime version.
+- [`core/kernel/source/jetbrains/mps/extapi/model/SModelDescriptorStub.java` (2025.1.4, lines 136-143)](https://github.com/JetBrains/MPS/blob/2025.1.4/core/kernel/source/jetbrains/mps/extapi/model/SModelDescriptorStub.java#L136-L143):
+  `SModelInternal.addLanguage(SLanguage)` delegates to the underlying `SModel`.
+- [`core/kernel/source/jetbrains/mps/smodel/SModel.java` (2025.1.4, lines 678-706)](https://github.com/JetBrains/MPS/blob/2025.1.4/core/kernel/source/jetbrains/mps/smodel/SModel.java#L678-L706):
+  `addLanguage` reads `SLanguage.getLanguageVersion()`, leaves an existing `-1` unchanged, and
   `setLanguageImportVersion` requires an existing import and records the supplied value.
+- `core/kernel/source/jetbrains/mps/smodel/SModel.java` (2026.1.1): the deprecated one-argument `addLanguage` records
+  `-1`; `setLanguageImportVersion` still requires an existing import and records the supplied value.
 - `core/persistence/source/jetbrains/mps/smodel/persistence/def/v9/ModelWriter9.java`: `saveUsedLanguages` serializes
   `getLanguageImportVersion` directly.
 - `core/kernel/source/jetbrains/mps/smodel/language/LanguageRegistry.java`: `getLanguage(SLanguage)` returns the active
