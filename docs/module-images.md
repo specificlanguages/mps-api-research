@@ -2,7 +2,8 @@
 
 How does MPS resolve module-relative images in development and in packaged modules, and which changes matter across
 versions? This note examines release sources from MPS 2022.3.3 through 2026.1.1, with detailed tracing of 2025.1.4 and
-2026.1.1. The version table lists the specific releases inspected; it does not imply testing every intervening build.
+2026.1.1, plus master at commit `060a562446473a8d995f2a6e59ce436b5aa8c0a0` (2026.2 EAP, build marker `262.SNAPSHOT`).
+The version table lists the specific revisions inspected; it does not imply testing every intervening build.
 
 **Verified from source:** since 2023.3.0, `EditorCell_Image` first treats `${module}/path/to/image.png` as the resource
 `path/to/image.png` on the owning module's classpath. Only if that lookup fails does it expand filesystem macros. The
@@ -12,7 +13,8 @@ check can reject an image that the cell loader could successfully load from the 
 **Inferred compatibility:** a custom editor that supplies the owning module and the unexpanded module-relative path and
 bypasses that validation gate should retain its image-loading behavior from 2025.1.4 through 2026.1.1. The entire
 `ModuleImageDescriptor.loadIcon` method is identical in 2025.1.4, 2025.2.4, 2025.3.2, and 2026.1.1. This is source
-evidence, not an end-to-end runtime test or a guarantee about future releases.
+evidence, not an end-to-end runtime test or a guarantee about future releases. The inspected master retains the same
+loading implementation and validation mismatch; its additional image-cell behavior is described below.
 
 ## Two meanings of a module-relative image path
 
@@ -83,14 +85,15 @@ from the validator implementations below. No custom-packaging runtime probe was 
 
 ## Version differences
 
-| Release sources inspected                        | Cell loading and development behavior                                                                                 | Stock `Image.isValid()`                                                  |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 2022.3.3                                         | Expands macros, then converts `java.io.File` to a URL for `IconLoader`; no module-runtime resource lookup             | Expanded path checked with MPS `IFile`                                   |
-| 2023.2.0, 2023.2.3                               | Uses `IFile` and `IFile.getUrl()` for the expanded path, allowing a proper archive URL; no classpath-first lookup     | Expanded path checked with MPS `IFile`                                   |
-| 2023.3.0, 2024.1.0                               | Classpath-first lookup for literal `${module}/...`, then `IFile` fallback; no source-directory resource-only item yet | Expanded source-descriptor path checked with MPS `IFile`                 |
-| 2023.3.2, 2024.1.1, 2024.1.6, 2024.3.0           | Same order, plus source-directory resource-only classpath item for unpackaged MPS-managed modules                     | Same filesystem-based validation                                         |
-| 2025.1.0, 2025.1.4                               | Same resource-first design; 2025.1.4 fallback uses the descriptor's filesystem and guards a missing descriptor        | Same filesystem-based validation                                         |
-| 2025.2.1, 2025.2.4, 2025.3.0, 2025.3.2, 2026.1.1 | Same `loadIcon` implementation as 2025.1.4                                                                            | Uses `new java.io.File(expandedPath).exists()`; still no resource lookup |
+| Release sources inspected                          | Cell loading and development behavior                                                                                 | Stock `Image.isValid()`                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 2022.3.3                                           | Expands macros, then converts `java.io.File` to a URL for `IconLoader`; no module-runtime resource lookup             | Expanded path checked with MPS `IFile`                                   |
+| 2023.2.0, 2023.2.3                                 | Uses `IFile` and `IFile.getUrl()` for the expanded path, allowing a proper archive URL; no classpath-first lookup     | Expanded path checked with MPS `IFile`                                   |
+| 2023.3.0, 2024.1.0                                 | Classpath-first lookup for literal `${module}/...`, then `IFile` fallback; no source-directory resource-only item yet | Expanded source-descriptor path checked with MPS `IFile`                 |
+| 2023.3.2, 2024.1.1, 2024.1.6, 2024.3.0             | Same order, plus source-directory resource-only classpath item for unpackaged MPS-managed modules                     | Same filesystem-based validation                                         |
+| 2025.1.0, 2025.1.4                                 | Same resource-first design; 2025.1.4 fallback uses the descriptor's filesystem and guards a missing descriptor        | Same filesystem-based validation                                         |
+| 2025.2.1, 2025.2.4, 2025.3.0, 2025.3.2, 2026.1.1   | Same `loadIcon` implementation as 2025.1.4                                                                            | Uses `new java.io.File(expandedPath).exists()`; still no resource lookup |
+| Master `060a56244647` (2026.2 EAP, `262.SNAPSHOT`) | Same loader as 2026.1.1; adds opt-in font-relative image sizing and alignment                                         | Same validator as 2026.1.1; mismatch remains                             |
 
 The significant changes can be verified independently:
 
@@ -105,6 +108,32 @@ The significant changes can be verified independently:
 - [Commit `a65687c2b94e`][validation-change], present in 2025.2.1 and subsequent inspected tags, changes `Image`
   validation from `IFile` to `java.io.File`. It does not align validation with image loading.
 
+### Master compared with 2026.1.1
+
+**Verified:** master at [commit `060a56244647`][master-revision], dated September 18, 2026, retains the image-resolution
+and packaging behavior described for 2026.1.1. Its application metadata identifies 2026.2 EAP with build marker
+`262.SNAPSHOT`; the exact commit disambiguates this non-unique snapshot marker. The upstream master ref matched this
+commit when checked on September 22, 2026. See [application metadata][master-version].
+
+- The entire `EditorCell_Image.ModuleImageDescriptor` implementation is unchanged, including classpath-first lookup,
+  fallback, and constructors. The cell factories are also unchanged.
+- `Image__BehaviorDescriptor` and `Image_EditorBuilder_a` are identical to 2026.1.1. The stock editor still gates
+  loading on `java.io.File`-based validation; `Image.getImageForGeneration()` still uses the raw property.
+- `MacrosFactory`, `ModuleClassLoaderSupport`, and `LocalResourceClassPathItem` are unchanged. The source-descriptor
+  lookup in `ModulesMiner` is unchanged; a separate change there concerns archive suffixes on Java model-root paths.
+- `FileIcon` behavior is unchanged. The build resource selector still includes `icons/**, resources/**`, and the
+  generated binary-JAR layout still includes these resources alongside classes.
+
+The relevant addition is `public void EditorCell_Image.setAlignWithText(boolean enabled)`. It defaults to `false`. When
+enabled, `justify` layout scales icon dimensions by the effective editor font size divided by 13, and the cell computes
+its descent to align the image's vertical center with surrounding text. This changes presentation when opted in, not
+where images are loaded from. A custom provider using the existing factories does not enable it automatically. See [the
+master image-cell source][master-loader].
+
+**Inferred:** the custom-provider approach using the actual resource owner and an unexpanded `${module}/...` path
+remains applicable to this master revision. No runtime rendering probe was performed. This comparison establishes
+MPS-side source behavior, not binary compatibility of an entire plugin or behavior of a future 2026.2 release.
+
 ## Why the stock Image editor reports an invalid path
 
 In 2025.1.4, the generated [Image editor][image-editor] calls `Image.isValid()` before constructing the image cell. On
@@ -112,7 +141,7 @@ failure it constructs the red `<invalid path>` cell instead. The valid branch pa
 `EditorCell_Image.createImageCell(context, node, imagePath)`; the loader is never reached on the invalid branch.
 
 For a packaged module with `resources/pic.png` in its binary JAR, the two editor paths diverge before loading. This flow
-summarizes the verified 2025.1.4 and 2026.1.1 implementations:
+summarizes the verified 2025.1.4, 2026.1.1, and pinned master implementations:
 
 ```mermaid
 flowchart TD
@@ -214,17 +243,22 @@ cited above.
 
 ## Evidence and limits
 
-All behavior described as verified was established by reading release-tagged source, generated Java, or generated Ant
-layouts. No MPS IDE or packaged-product rendering probe was run. Application-specific module registration, classloader
-configuration, resource contents, and cell lifecycle still require integration verification. Compatibility claims
-concern image loading; they do not validate other editor lifecycle changes or promise binary compatibility of an entire
-language/plugin across MPS releases.
+All behavior described as verified was established by reading release-tagged or commit-pinned source, generated Java, or
+generated Ant layouts. No MPS IDE or packaged-product rendering probe was run. Application-specific module registration,
+classloader configuration, resource contents, and cell lifecycle still require integration verification. Compatibility
+claims concern image loading; they do not validate other editor lifecycle changes or promise binary compatibility of an
+entire language/plugin across MPS releases.
 
 The resources language lives in `languages/languageDesign/jetbrains.mps.lang.resources.jar`; the macro, module runtime,
 and classloader implementations are in `lib/mps-core.jar`. Distribution mappings are recorded in
 [`build/mpsBootstrapCore.xml`][distribution]. Source links below use release tags or exact commits, and the named
 classes and methods provide stable search anchors.
 
+[master-revision]: https://github.com/JetBrains/MPS-development/commit/060a562446473a8d995f2a6e59ce436b5aa8c0a0
+[master-version]:
+  https://github.com/JetBrains/MPS-development/blob/060a562446473a8d995f2a6e59ce436b5aa8c0a0/workbench/mps-workbench/source/idea/MPSApplicationInfo.xml
+[master-loader]:
+  https://github.com/JetBrains/MPS-development/blob/060a562446473a8d995f2a6e59ce436b5aa8c0a0/editor/editor-runtime/source/jetbrains/mps/nodeEditor/cells/EditorCell_Image.java
 [loader]:
   https://github.com/JetBrains/MPS/blob/2025.1.4/editor/editor-runtime/source/jetbrains/mps/nodeEditor/cells/EditorCell_Image.java
 [macros]:
