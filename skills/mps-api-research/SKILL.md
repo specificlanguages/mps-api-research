@@ -79,8 +79,9 @@ When the investigation requires reading serialized MPS models, read
 ## Preserve reusable findings
 
 When the investigation establishes a reusable fact not already documented for the relevant version, create or update a
-focused note under `docs/` in a writable checkout of this repository. Read
-[references/research-notes.md](references/research-notes.md) before writing or reviewing a note.
+focused note under `docs/` in a writable checkout of the specificlanguages/mps-api-research repository (where this skill
+is likely linked from). Read [references/research-notes.md](references/research-notes.md) before writing or reviewing a
+note.
 
 Do not create a note when:
 
@@ -89,9 +90,11 @@ Do not create a note when:
 - the finding is specific to the originating project; or
 - the evidence is too incomplete to support a useful verified conclusion.
 
-If no suitable writable checkout is available, ask once for permission to prepare one. If that is not possible, include
-a ready-to-save Markdown note in the final response. Lack of authorization to commit, push, fork, or open a pull request
-does not prevent a permitted local documentation edit.
+After establishing reusable findings, you MUST prepare a research note. The destination repository is
+specificlanguages/mps-api-research, not the requesting project. If that repository is not writable, ask once for
+permission to prepare a writable checkout. Filesystem restrictions change where you prepare the note; they do not waive
+the documentation requirement. If permission is unavailable, include the complete ready-to-save note in your final
+response.
 
 ## Finish
 
