@@ -6,7 +6,9 @@ Can a custom MPS RCP disable IntelliJ feature usage statistics (FUS), or redirec
 
 ## Disable the standard statistics pipeline
 
-**Verified from source:** supply these JVM system properties when starting the RCP:
+**Yes: the three properties below are sufficient to disable the standard FUS pipeline in all three inspected versions**,
+provided no extension forces logging or supplies a provider with its own permission policy. Set them before application
+startup:
 
 ```text
 -Didea.disable.collect.statistics=true
@@ -17,6 +19,22 @@ Can a custom MPS RCP disable IntelliJ feature usage statistics (FUS), or redirec
 Put them in the RCP launcher's VM options, or pass them to the actual application/test JVM in CI. Setting them only on
 the Gradle or Ant process does not establish that a forked application receives them. Set them before application
 startup and restart existing processes.
+
+**Verified from source:** with these properties, the standard FUS provider has recording and sending disabled. With no
+forced-logging extension, it also has logging disabled, so the scheduler skips its validation metadata updates.
+
+| Activity                                                           | Result with all three properties at startup                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Standard FUS event recording for upload                            | Disabled.                                                        |
+| Standard FUS uploads during execution and at shutdown              | Disabled.                                                        |
+| Standard FUS scheduled validation metadata/configuration downloads | Disabled, because the provider's logging-enabled check is false. |
+| Requests made directly through `RegionUrlMapper`                   | Still possible: the mapper does not check these properties.      |
+
+For a CI run that the platform already considers headless, with `idea.headless.enable.statistics` absent or false, the
+ordinary FUS collection path is already disabled. Adding the other two properties does not explain or resolve mapper
+requests in that situation. **The three properties are sufficient for the standard FUS pipeline, but are not sufficient
+to guarantee elimination of the reported `RegionUrlMapper` SSL messages.** To address that symptom, identify and disable
+its caller, or redirect the mapper's configuration download as described below.
 
 The same property names and relevant checks exist in all three inspected versions:
 
@@ -30,8 +48,10 @@ The same property names and relevant checks exist in all three inspected version
 standard `FeatureUsageEventLoggerProvider` requires collection permission to record, and both recording and sending
 permission to upload. The shutdown uploader also filters providers using `isSendEnabled()`.
 
-Suppressing reporting alone is insufficient to prevent statistics-related downloads. Validation metadata updates are
-gated by `StatisticsEventLoggerProvider.isLoggingEnabled()`, independently of upload permission:
+The collection properties are what stop the scheduled metadata downloads. Setting only
+`idea.suppress.statistics.report=true` stops uploads but leaves collection and metadata downloads eligible to run.
+Validation metadata updates are gated by `StatisticsEventLoggerProvider.isLoggingEnabled()`, independently of upload
+permission:
 
 ```text
 StatisticsJobsScheduler
@@ -45,11 +65,11 @@ In 2025.1.4 the scheduled validation update starts after three minutes and repea
 internal initial-delay flag changes startup timing. In 2026.1.1 and the inspected master snapshot, the scheduler starts
 per-provider validation storage updates; the logging-enabled gate remains.
 
-These controls cover the standard consent-aware statistics providers. They are not an application-wide networking switch
-or a guarantee that no statistics-related code executes. `isLoggingEnabled()` also accepts `isLoggingAlwaysActive()`,
-and platform extensions can force logging independently of normal collection permission. Custom providers can implement
-their own policies. Inspect those extensions if a tailored RCP still downloads FUS metadata after applying the
-properties.
+The extension qualification above comes from `isLoggingEnabled()`: it also accepts `isLoggingAlwaysActive()`, and
+platform extensions can force logging independently of normal collection permission. Inspect those extensions and any
+custom providers if an RCP still downloads FUS metadata after applying the properties. The verified outcome is disabling
+the standard recording, upload, and scheduled metadata paths; local statistics consumers and unrelated networking have
+separate behavior.
 
 Do not use `idea.local.statistics.without.report=true` as an offline switch: it permits local collection and therefore
 can leave metadata downloads enabled. Likewise, the test-endpoint properties select test infrastructure, not an offline
