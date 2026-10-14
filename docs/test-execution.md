@@ -9,7 +9,7 @@ owning modules' classloaders, the appropriate JUnit engines, and an MPS test ses
 
 ## Versions and evidence scope
 
-Source inspection performed on 2026-09-17:
+Test execution APIs were inspected on 2026-09-17; the shipped worker interface was checked again on 2026-09-30:
 
 | Line   | Exact source revision                      | Version declared by the testing plugin | Bundled Platform / Jupiter / Vintage |
 | ------ | ------------------------------------------ | -------------------------------------- | ------------------------------------ |
@@ -23,8 +23,8 @@ not a claim that a corresponding binary release has shipped. The findings apply 
 was not individually inspected. The test-platform and JUnit-launcher generated source directories in the 2026.1 and
 master snapshots are identical.
 
-This is source-verified research, not an end-to-end runtime probe. In particular, arbitrary editor tests, project reuse
-in a custom host, cancellation, and execution under different outer locks have not been runtime-tested.
+The API contracts are source-verified. A focused 2024.1.6 worker-startup probe is noted below; arbitrary editor tests,
+project reuse in a custom host, cancellation, and execution under different outer locks have not been runtime-tested.
 
 Version evidence: `plugins/mps-testing/META-INF/plugin.xml` and `build/version.properties` at each revision.
 
@@ -232,6 +232,194 @@ need more than a class/method pair for individual invocation identity.
 Evidence: [2026.1 script launcher][script26], [master script launcher][scriptMaster], [current abstract
 launcher][abstractMaster], [test plan][testData], and [fixture session integration][fixtureExtension].
 
+## MPS MCP test execution in 2026.1
+
+**Verified:** `mps_mcp_create_run_configuration(nodeReference, configurationName?)` resolves exactly one root node in
+the open MPS project. If it implements `ITestCase`, the tool registers a standard `JUnit Tests` run configuration with
+`JUnitRunTypes.NODE` and that root's node reference in `testCases`. It rejects non-root selections and does not expose
+project, module, model, or individual method selection in this creation call. The generic MCP
+`execute_run_configuration` tool subsequently executes the named IDE run configuration; it also works with an existing
+configuration whose scope was set in MPS.
+
+**Verified:** The `JUnit Tests` configuration supports `PROJECT`, `MODULE`, `MODEL`, `NODE`, and `METHOD` scopes. A
+fresh `JUnitSettings_Configuration` starts with its legacy in-process flag set to `true`; a saved run-configuration
+template can carry a different value. The MCP creation tool sets the flag to `false` when the selected `ITestCase` says
+it cannot run in-process, and otherwise leaves the configuration's existing/default value. For example,
+`BTestCase.canRunInProcess()` returns `false`; the base `ITestCase` behavior returns the inverse of its
+`canNotRunInProcess` property. Debug execution also prevents in-process execution. At run time,
+`JUnitTests_Configuration_RunProfileState.execute()` chooses `JUnitInProcessRunStarter` only when
+`canExecuteInProcess()` is true; otherwise it uses `JUnitOutOfProcessStarter`.
+
+**Verified for a `METHOD` run configuration:** The IDE producer stores the selected test-method node reference in
+`JUnitSettings_Configuration.testMethods`. `JUnitRunTypes.METHOD` resolves it to an `ITestNodeWrapper`; the forked
+command serializes the wrapper's module reference, generated class-and-method name, node reference, and
+`isTestCase=false` into `ExecutorScript`. For an MPS-aware test, `WithPlatformTestExecutor` reads that script, splits
+the generated name at its last dot, and adds a `TestData.TestRecord` for that method under an explicit
+(non-auto-discovery) module record. `TestDiscoveryContributor` loads the generated class from its MPS module classloader
+and calls `DiscoverySelectors.selectMethod(testClass, methodName)`. Thus the fork selects the method rather than
+scanning or running the entire test class. The serialized MPS node reference identifies the original selection on the
+IDE side; the JUnit selector in the fork is based on the generated class and method names.
+
+**Verified:** The MCP creation tool above does not create `METHOD` configurations. An existing `METHOD` configuration
+can be executed by name through MCP. If the test does not require an MPS platform, the fork uses the plain
+`DefaultTestExecutor` or compatibility launcher with a `-m class.method` argument instead of `WithPlatformTestExecutor`.
+
+**Verified:** The out-of-process IDE route uses `JUnit_Command` with the selected `ITestNodeWrapper` records. Tests
+requiring an MPS platform launch `WithPlatformTestExecutor`, which starts a test-mode `IdeaEnvironment` and passes
+explicit classes or methods to `ScriptJUnit5Launcher`. This is a different launcher and script format from the Ant
+`LaunchTestWorker` described below. Tests that do not require MPS can use `DefaultTestExecutor` or the compatibility
+launcher instead.
+
+```text
+MCP create(root ITestCase) -> IDE JUnit Tests configuration, NODE scope
+MCP execute(name)       -> MPS run profile
+                           -> in-process starter, if permitted and configured
+                           -> out-of-process starter otherwise
+```
+
+Evidence: `plugins/mcp-tools/src/jetbrains/mps/agents/mcp/tools/JetBrainsMPSRunConfigurationMcpToolset.kt`,
+`plugins/execution-configurations/junit/source_gen/jetbrains/mps/baseLanguage/unitTest/execution/settings/JUnitSettings_Configuration.java`
+and `JUnitRunTypes.java`,
+`plugins/execution-configurations/plugin/source_gen/jetbrains/mps/execution/configurations/implementation/plugin/plugin/JUnitTests_Configuration_RunProfileState.java`,
+`plugins/execution-configurations/junit/source_gen/jetbrains/mps/baseLanguage/unitTest/execution/client/JUnit_Command.java`,
+and
+`plugins/execution-configurations/junit/launcher/source_gen/jetbrains/mps/baselanguage/unitTest/execution/launcher/WithPlatformTestExecutor.java`
+at the 2026.1 revision in the version table.
+
+## Reusing the IDE's out-of-process route
+
+**Verified across 2024.1, 2025.1, and 2026.1:** The `JUnit Tests` run configuration has `PROJECT`, `MODULE`, `MODEL`,
+`NODE`, and `METHOD` scopes. `NODE` holds test-case root references; `METHOD` holds test-method references. The
+configured scope collects `ITestNodeWrapper` values in the open IDE project. `JUnitOutOfProcessStarter` passes those
+wrappers to `JUnit_Command`, which calculates the execution classpath and serializes explicit module and generated
+class/method names through `ClientExecutorScript` and `ExecutorScript`. The external process receives a project path for
+test fixtures, but starts its own test-mode `IdeaEnvironment` without opening that disk project as its discovery
+project.
+
+**Verified:** The external executor is selected per test requirements. An MPS-aware test uses
+`WithPlatformTestExecutor`; a test that does not require the MPS platform uses `DefaultTestExecutor` or the legacy
+compatibility launcher. In 2024.1 and 2025.1, `WithPlatformTestExecutor` delegates to `CommandLineTestExecutor` inside
+MPS. In 2026.1, it instead turns the serialized selections into explicit `TestData` records and calls
+`ScriptJUnit5Launcher`. The outer `ExecutorScript` carries the same selection fields, but the implementation behind it
+changed.
+
+**Verified:** The IDE external executor emits test start, finish, failure, and skip tokens on its process output. The
+IDE parses them with `UnitTestProcessListener` and `TestEventMessage`; their identifiers are primarily generated class
+and method names, not JUnit unique IDs or MPS source references. A controller needing durable partial results,
+individual parameterized-invocation identity, or source-node reporting must account for that narrower event format.
+`JUnit_Command` returns an IntelliJ `ProcessHandler` and its launch calculators are coupled to IDE run-configuration and
+project state; using the path from a different headless host requires an integration probe.
+
+Evidence: `plugins/execution-configurations/junit/source_gen/jetbrains/mps/baseLanguage/unitTest/execution/client/`
+(`JUnit_Command.java`, `ProgramParametersCalculator.java`, `CPCalculator.java`, `ClientExecutorScript.java`,
+`TestDescriptorWrapper.java`, `UnitTestProcessListener.java`),
+`plugins/execution-configurations/junit/launcher/source_gen/jetbrains/mps/baselanguage/unitTest/execution/launcher/`
+(`ExecutorScript.java`, `WithPlatformTestExecutor.java`, `DefaultTestExecutionListener.java`), and the 2024.1/2025.1
+`CommandLineTestExecutor.java` under
+`plugins/execution-configurations/junit/source_gen/jetbrains/mps/baseLanguage/unitTest/execution/server/`.
+
+## Invoking the shipped test worker with a script
+
+**Verified in 2024.1, 2025.1, and 2026.1 sources:** `jetbrains.mps.lang.test.launcher.LaunchTestWorker.main(String[])`
+reads its first argument with `Script.fromDumpInFile(File)` and calls `workFromMain()`.
+`jetbrains.mps.tool.common.Script` can be populated with `addModuleFile(File)`, `addProjectFile(File)`, libraries,
+macros, plugins, and properties, then serialized with `dumpToTmpFile()`. The reader deletes the serialized file after
+loading it. The project directory is passed to test fixtures through `SystemProperties.PROJECT_PATH`; it is not opened
+as the test-discovery project.
+
+```text
+Script(module descriptor files, optional project directory, properties)
+  -> LaunchTestWorker.main(script-file)
+  -> IdeaEnvironment in test mode
+  -> discover compiled tests in supplied modules
+  -> JUnit execution and optional XML reports
+```
+
+**Verified:** `LaunchTestTask` forks this worker, adds
+`plugins/mps-testing/languages/launcher/jetbrains.mps.lang.test.launcher.jar` to its classpath, includes MPS `lib/` JARs
+through `MpsLoadTask`, and supplies its JVM options, including `--add-opens` and `-DNO_FS_ROOTS_ACCESS_CHECK=true`. The
+worker entry point can be launched without Ant, but its caller then owns that classpath and JVM setup.
+`WorkerBase.workFromMain()` exits the process after flushing events and disposing the environment; it is an
+out-of-process entry point.
+
+**Verified in 2024.1 and 2025.1:** The launcher creates a temporary project from all module files in the script, surveys
+their test roots, and gives JUnit class selectors for discovered classes. The script has no model, node, or method
+selection field used by this worker. **Verified in 2026.1:** The worker loads the supplied module descriptors into the
+repository and creates `TestData.ModuleRecord` entries with `autoDiscovery=true`. Although `TestData` itself supports
+explicit class and method selection, the worker does not read such a plan from `Script`.
+
+**Verified:** `LaunchTestWorker` does not generate or compile the selected modules; their test classes must already be
+available to MPS module classloading. The script properties `launchtests.testReportsDir` and
+`launchtests.testReportsOpenTest` select JUnit XML reporting. The worker reports errors through its callback, process
+output, and exit code; it does not expose a structured per-test event channel to the invoking process. An external
+controller that needs selected nodes, source references, or results preserved before a timeout must supply its own
+selection and reporting layer or adapt the worker.
+
+**Observed with a 2024.1.6 test-mode launch outside the Ant task:** IDEA startup required
+`-Djava.system.class.loader=com.intellij.util.lang.PathClassLoader` before the worker could create a project. A caller
+must verify the effective JVM requirements for each MPS distribution and JBR combination; the Ant task's source is a
+starting point, not proof that copying one release's command line works on every host.
+
+Evidence: `core/tool/common/source_gen/jetbrains/mps/tool/common/Script.java`,
+`core/tool/builder/source_gen/jetbrains/mps/tool/builder/WorkerBase.java`,
+`core/tool/ant/source_gen/jetbrains/mps/build/ant/MpsLoadTask.java`,
+`core/tool/ant/source_gen/jetbrains/mps/build/ant/junit/LaunchTestTask.java`, [2024.1 script launcher][script24],
+[2025.1 script launcher][script25], and [2026.1 worker][worker26].
+
+## Comparing IDE execution with Ant execution
+
+Model/module execution with the Ant machinery, including runtime comparisons on 2024.1.6, 2025.1.4, 2026.1.1, and
+development build `262.9437.476`, is covered in
+[Reusing Ant test execution with model selection](ant-test-worker-compatibility.md). That note identifies an inherited
+launcher method that can filter classes on the older releases while preserving the stock execution path.
+
+**Verified in the 2024.1, 2025.1, and 2026.1 source snapshots above:** Matching selection scopes does not establish
+matching execution semantics. The Ant worker accepts module descriptors and discovers tests automatically. The IDE
+collects explicit selections in its project and passes them to a separate external entry point. Both MPS-aware routes
+initialize IDEA in test mode, but their startup inputs and result listeners differ.
+
+```text
+2026.1 Ant:  Script -> LaunchTestWorker --------> ScriptJUnit5Launcher -> FailureDetector
+2026.1 IDE:  ExecutorScript -> WithPlatformTestExecutor -> same launcher -> DefaultTestExecutionListener
+2024/2025:   Ant uses ScriptJUnit5Launcher; IDE uses CommandLineTestExecutor -> JUnit5TestExecutor
+```
+
+**Verified:** The JUnit 5 listeners have these differences in all three inspected release lines:
+
+| Execution event  | Ant `FailureDetector`  | IDE `DefaultTestExecutionListener`                                                     |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------------------- |
+| Failed test      | Adds a failure         | Adds a failure and emits failure output                                                |
+| Aborted test     | Does not add a failure | Adds a failure and emits failure output                                                |
+| Failed container | Adds a failure         | Does not add a failure; emits only container completion, or omits the engine container |
+
+The IDE executor uses its listener's failure count when determining its normal process exit code. These are
+source-verified listener and caller behaviors, not observations from running a failing setup or aborted test through
+both complete command lines. Exceptions, callback errors, and platform logging can independently affect the process.
+
+**Verified in 2026.1:** Ant's `FailureDetector.executionFinished` also calls `TestLoggerFactory.onTestFinished(...)`.
+The listener overload of `ScriptJUnit5Launcher.launchTests` uses the supplied listener instead of installing
+`FailureDetector`. A host replacing the listener therefore takes responsibility for both outcome tracking and this
+test-logging integration; reusing the launcher alone does not preserve them.
+
+**Inferred integration guidance:** For compatibility with a build that invokes `<launchtest>`, use that task's effective
+worker setup and outcomes as the reference. Preserve its environment, module/library and plugin inputs, MPS session,
+JUnit engines, and failure handling when adding focused selectors and structured results. The shared 2026.1 launcher
+reduces the amount of custom execution code needed. The older class-only Ant launcher API requires an adapter for method
+selection. The IDE route is evidence for implementing explicit selectors, not proof of equivalence to the Ant worker.
+
+**Unresolved:** No paired runtime probe recorded here establishes end-to-end equivalence between direct IDE-runner
+invocation and `<launchtest>`. A useful comparison builds the fixtures once, supplies the same compiled artifacts and
+runtime inputs to both paths, and compares discovery and outcomes for whole modules before checking selected subsets.
+Include aborted tests, failing containers, environment-aware legacy tests, and fixtures that open or reopen projects. A
+selected subset cannot establish the outcome of the complete suite, whose ordering and shared state can differ.
+
+Evidence: `FailureDetector.java` and `ScriptJUnit5Launcher.java` under
+`plugins/mps-testing/languages/junit5/source_gen/jetbrains/mps/lang/test/junit5/`; `DefaultTestExecutionListener.java`,
+`DefaultTestExecutor.java`, `JUnit5TestExecutor.java`, and `WithPlatformTestExecutor.java` under
+`plugins/execution-configurations/junit/launcher/source_gen/jetbrains/mps/baselanguage/unitTest/execution/launcher/`;
+and `CommandLineTestExecutor.java` under
+`plugins/execution-configurations/junit/source_gen/jetbrains/mps/baseLanguage/unitTest/execution/server/`.
+
 ## Existing-process execution, project lifecycle, and locks
 
 An MPS test platform is not an interpreter for arbitrary nodes. Tests execute generated code and can need MPS project,
@@ -334,6 +522,8 @@ is committed source and exposes the exact Java signatures used above.
   https://github.com/JetBrains/MPS/blob/651a60b1cf3b890a2ae23f417734d94137962742/plugins/mps-testing/languages/junit5/source_gen/jetbrains/mps/lang/test/junit5/TestDiscoveryContributor.java
 [worker]:
   https://github.com/JetBrains/MPS/blob/651a60b1cf3b890a2ae23f417734d94137962742/plugins/mps-testing/solutions/launcher/source_gen/jetbrains/mps/lang/test/launcher/LaunchTestWorker.java
+[worker26]:
+  https://github.com/JetBrains/MPS/blob/499c4a0fe6bfe7f95462c33966c72192158446ca/plugins/mps-testing/solutions/launcher/source_gen/jetbrains/mps/lang/test/launcher/LaunchTestWorker.java
 [abstract24]:
   https://github.com/JetBrains/MPS/blob/6236c4073eac3cde78506add6b0fa90601d76009/plugins/mps-testing/languages/junit5/source_gen/jetbrains/mps/lang/test/junit5/AbstractJUnit5Launcher.java
 [abstract25]:

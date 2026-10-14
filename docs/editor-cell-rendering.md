@@ -160,6 +160,32 @@ concept's alias followed by each role and its children (e.g. `json object { cont
 used both when a concept legitimately defines no editor and when the concept did not resolve at all, so the reflective
 output on its own does not distinguish the two.
 
+### MPS 2026.1.1 reflective output
+
+**Verified:** In MPS 2026.1.1, `AbstractDefaultEditor.createEditorCell` labels the node with `myConcept.getName()`.
+Reflective output therefore uses the concept name rather than the alias described above. `DefaultEditor.addPropertyCell`
+uses `SPropertyAccessor` and supplies `<no PROPERTY_NAME>` as the default cell text. Both implementations are in
+`lib/mps-editor.jar`.
+
+**Observed:** Rendering a source-only language's unresolved nodes through a headless editor on 2026.1.1 produced concept
+names, child roles, and property placeholders. Persisted nonempty property strings were not displayed in that fixture.
+This observation does not establish that all unresolved properties produce placeholders, or that those property values
+are absent from the model.
+
+```text
+SampleObject {
+  properties:
+  value : <no value>
+}
+```
+
+For tests of reflective subtree rendering, assert the concept and role structure independently of property values.
+
+Evidence:
+
+- [AbstractDefaultEditor.createEditorCell](https://github.com/JetBrains/MPS/blob/2026.1.1/editor/editor-runtime/source/jetbrains/mps/nodeEditor/AbstractDefaultEditor.java#L80-L107)
+- [DefaultEditor.addPropertyCell](https://github.com/JetBrains/MPS/blob/2026.1.1/editor/editor-runtime/source/jetbrains/mps/nodeEditor/DefaultEditor.java#L108-L114)
+
 ## Concept validity: `SConcept.isValid()`
 
 `org.jetbrains.mps.openapi.language.SAbstractConcept.isValid()` (`mps-openapi.jar`) is false when a node's concept did
