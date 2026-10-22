@@ -105,7 +105,8 @@ MPS source roots → VFS traversal → file status/size → required indexes →
 1. **No indexable root reaches the file.** `MPSIndexableSetContributor` obtains roots from `IndexableRootCalculator`,
    which derives paths from `FileBasedModelRoot` source roots of kind `SOURCES`, including repository-visible libraries.
    Failed path-to-VirtualFile mapping, unavailable archives, missing model roots or stale root notifications can leave
-   files outside coverage. Their involvement in a particular failure needs observation.
+   files outside coverage. Their involvement in a particular failure needs observation. For when a freshly opened
+   project's roots appear, see [index roots after project open](index-roots-after-project-open.md).
 2. **Traversal rejects the file.** Symlink rules apply as above. The common traversal also rejects files without a
    positive persistent `VirtualFileWithId` ID. An invalid file is rejected by the scanner.
 3. **Exclusions depend on the root provider.** Ordinary project traversal rejects excluded or ignored files via
