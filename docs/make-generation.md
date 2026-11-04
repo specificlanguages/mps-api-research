@@ -338,7 +338,9 @@ appear, making languages in a separate, prior make invocation from their clients
 
 - **Parallel generation.** `project.getComponent(GenerationSettingsProvider::class.java).generationSettings` exposes
   `isParallelGenerator`, `numberOfParallelThreads`, and `isStrictMode`. Parallel generation requires strict mode.
-  `execute-generators` toggles these from CLI flags before calling make.
+  `execute-generators` toggles these from CLI flags before calling make. To change them for one make only, pass
+  generation options through the controller instead; see
+  [parallel-generation-per-make.md](parallel-generation-per-make.md).
 - **Skipping / configuring compilation.** To control the Java/Kotlin compile step, pass an `IScriptController.Stub2`
   built with a `JavaCompileFacetInitializer`:
   `new JavaCompileFacetInitializer().skipCompilation(true).setJavaCompileOptions(opts)`, then
