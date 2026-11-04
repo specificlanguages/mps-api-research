@@ -223,6 +223,54 @@ editor checking/highlighting mechanism. Merely parsing, saving, or requesting a 
 execute it. An explicit `YetUnknownResolver` call provides the same concept-specific substitution behavior without
 depending on that editor scheduler.
 
+## Method and constructor overloads
+
+Researched in 2024.1 and 2026.1 sources (`MethodResolveUtil` is unchanged between them) and observed at runtime in a
+headless MPS 2026.1.2 and 2024.1.6 environment.
+
+**Verified:** the converter does not choose overloads by argument types. Its passes call `SReference.getTargetNode()` on
+dynamic references and then make the found target static (`JavaToMpsConverter.resolveRefs`). For a method reference that
+is a scope lookup by name. `UnknownInstanceMethodCall.getResolvedMethod` also selects by name, and the constructor
+helper falls back to argument count.
+
+**Observed:** after the parse/converter/`YetUnknownResolver`/converter sequence, a snippet with
+`StringBuilder.append('x')`, `append(int)`, `append("s")` and `new ArrayList<String>(list)` bound every `append` call to
+`append(Object)` and the copy constructor to `ArrayList(int)`. No reference was left unresolved. Model check then
+reported "Reference to wrong overridden method", "Incompatible method signature" and type errors.
+
+The editor repairs such calls through the BaseLanguage non-typesystem rule `MethodCallsFixer`, which applies to every
+`jetbrains.mps.baseLanguage.structure.IFixableMethodReference` (instance, static, local and super method calls, class
+creators and constructor invocations). It calls the public utility that editor actions also use:
+
+```java
+// jetbrains.mps.baseLanguage.scopes.MethodResolveUtil
+// solution e39e4a59-8cb6-498e-860e-8fa8361c0d90(jetbrains.mps.baseLanguage.scopes),
+// languages/baseLanguage/jetbrains.mps.baseLanguage.scopes.jar
+public static Tuples._2<SNode, Boolean> resolveMethod(SNode methodCall);
+public static void replaceFromEditor(SNode methodCallNode);
+```
+
+`resolveMethod` gathers candidates by the call's method name, filters by visibility and parameter count, then by
+argument types (`TypecheckingFacade.getFromContext().getTypeOf` in an isolated computation, and `isSubtype`). It returns
+the selected declaration and whether the choice is a good replacement. `replaceFromEditor` sets the call's target
+through `IFixableMethodReference.setMethodDeclaration` only when the choice is good and differs from the current target,
+so it is a no-op on correct and on ambiguous calls. Despite its name it has no editor dependency.
+
+**Observed:** calling `replaceFromEditor` on every `IFixableMethodReference` in the inserted subtrees, after the
+resolution sequence, inside a command and without an open editor, bound all calls above to the overloads Java selects;
+model check then reported no errors. Process the calls in reverse depth-first pre-order (arguments before the calls that
+take them), since an argument's type can depend on the overload its own call binds to. The typechecking facade was
+available in this headless setup without extra session setup.
+
+The class is not on the IntelliJ plugin classpath of `jetbrains.mps.ide.java`; it lives in a module jar loaded by MPS
+module class loaders. **Observed:** the BaseLanguage `LanguageRuntime`'s class loader
+(`LanguageRegistry.getInstance(repository).getLanguage(baseLanguage).getClass().getClassLoader()`) loads it, since
+BaseLanguage re-exports its dependency on the scopes solution.
+
+**Unresolved:** behavior for generic methods whose selection depends on inferred type arguments, and for calls the
+utility reports as not a good replacement. Calls it cannot decide keep the converter's name-based target, so a model
+check is still needed.
+
 ## Extending AST-to-BaseLanguage conversion
 
 The converters offer usable Java override points, but `JavaParser` does not expose converter injection. Its `parse`
