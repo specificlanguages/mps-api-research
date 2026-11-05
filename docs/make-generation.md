@@ -72,7 +72,7 @@ val models: List<SModel> = project.modelAccess.runReadAction(Computable {
 })
 
 // 2. Turn models into make resources (grouped by module).
-val resources = ModelsToResources(models).resources().toList()
+val resources = ModelsToResources(models, /* cleanMake = */ true).resources().toList()
 if (resources.isEmpty()) return NOTHING_TO_GENERATE
 
 // 3. Run make. Passing a null script lets MPS build the right script per module cluster.
@@ -162,8 +162,9 @@ Source: `core/resources/source_gen/.../ModelsToResources.java`.
   before calling `make`.
 - `resources()` reads the model graph; call it inside a read action (the reference code does — the MPS source even
   leaves an `// XXX resources() needs model access, isn't it?` note confirming it).
-- The constructor takes a `cleanMake` flag (default `false`) that is stamped onto each `MResource`; keep it consistent
-  with the `MakeSession`'s clean-make flag.
+- The constructor takes a `cleanMake` flag (default `false`) that is stamped onto each `MResource` as
+  `MakeKeys.CLEAN_MAKE`. This per-resource flag is the one the make facets read; see
+  [generation-options-per-make.md](generation-options-per-make.md#clean-make).
 
 ## `MakeSession`
 
@@ -175,7 +176,8 @@ MakeSession(@NotNull Project mpsProject, @NotNull IMessageHandler messageHandler
 
 - `messageHandler` is `@NotNull` — a `null` handler is no longer supported. Use `IMessageHandler.NULL_HANDLER` for
   `/dev/null`, or a real handler to capture messages.
-- `cleanMake = true` forces a full rebuild of the given resources; `false` makes only dirty models. `execute-generators`
+- `MakeSession.isCleanMake()` is read only by `WorkbenchMakeService`, for the "Rebuild"/"Make" script name. It does not
+  change what is generated or deleted; the per-resource flag from `ModelsToResources` does that. `execute-generators`
   and `BaseGeneratorWorker` both pass `true`.
 
 ## Collecting errors: `IMessageHandler` + the reliability caveat
@@ -301,11 +303,12 @@ only because it already includes every language module.
 ### "un-made" vs "make everything in the closure"
 
 The make framework has no notion of "make only the un-made ones" that adds modules; the choice of _what to include_ is
-yours, and `cleanMake` only chooses full vs incremental for what you did include:
+yours. Every model handed to the make is generated in full: there is no per-root reuse of earlier results
+(`GenerationSession` creates `GenerationDependencies` only after generation, to record the model's hash for its
+generation status; verified in 2024.1.6, 2026.1.1 and master `ef47222`). `cleanMake` does not change what is generated;
+it only changes which old output files TextGen deletes (see
+[generation-options-per-make.md](generation-options-per-make.md#clean-make)).
 
-- **`cleanMake = false`** — incremental. For each input model the generator reuses per-root caches from
-  `GenerationDependencies`, so up-to-date models cost little but are still visited. It does **not** skip a whole model
-  for you.
 - **Whole-model skip is a caller-side pre-filter.** `jetbrains.mps.generator.ModelGenerationStatusManager`
   (`mps-generator.jar`) answers `generationRequired(model)` by comparing the model's current content hash against the
   last-generated hash (and returns true for changed/uncomputable models). `getModifiedModels(models)` filters a
@@ -314,9 +317,8 @@ yours, and `cleanMake` only chooses full vs incremental for what you did include
 
 Two workable strategies for "make the requested modules and any un-made dependency":
 
-1. **Whole closure, incremental** — include the entire `COMPILE` closure (filtered to generatable modules) and make with
-   `cleanMake = false`. Simplest and always correct; up-to-date dependencies are cheap incremental no-ops. Cost: every
-   model in the closure is still visited each run.
+1. **Whole closure** — include the entire `COMPILE` closure (filtered to generatable modules). Simplest and always
+   correct. Cost: every model in the closure is generated in full on each run.
 2. **Closure filtered by generation status** — from the closure, keep the requested modules' models plus only those
    dependency models where `generationRequired` is true, then make. Faster on large closures. Relies on the same
    staleness signal the IDE uses; note it tracks _generation_ staleness (model hash), not whether compiled `.class`
